@@ -10,6 +10,63 @@ provider "libvirt" {
   uri = "qemu:///system"
 }
 
+resource "libvirt_cloudinit_disk" "vm1_init" {
+  name = "vm1-cloudinit"
+
+  # User-data: Configure root password, enable SSH, install packages
+  user_data = <<-EOF
+    #cloud-config
+    # Set root password to "password" (change this!)
+    chpasswd:
+      list: |
+        root:password
+      expire: false
+
+    # Enable SSH password authentication
+    ssh_pwauth: true
+
+    # Install and enable SSH server
+    packages:
+      - openssh-server
+
+    # Optional: Add SSH public key for key-based auth (more secure)
+    # ssh_authorized_keys:
+    #   - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC0/Ho... your-key-here
+
+    # Set timezone
+    timezone: UTC
+
+    # Final message on console
+    final_message: "VM1 is ready! SSH: ssh root@<IP>"
+  EOF
+
+  # Meta-data: Instance identification
+  meta_data = <<-EOF
+    instance-id: vm1-001
+    local-hostname: ubuntu-vm1
+  EOF
+
+  # Network config: Use DHCP (default behavior)
+  network_config = <<-EOF
+    version: 2
+    ethernets:
+      eth0:
+        dhcp4: true
+  EOF
+}
+
+resource "libvirt_volume" "vm1_cloudinit" {
+  name = "vm1-cloudinit.iso"
+  pool = "default"
+  # Format will be auto-detected as "iso"
+
+  create = {
+    content = {
+      url = libvirt_cloudinit_disk.vm1_init.path
+    }
+  }
+}
+
 resource "libvirt_volume" "ubuntu_base" {
   name   = "ubuntu-24.04.qcow2"
   pool   = "default"
@@ -28,7 +85,7 @@ resource "libvirt_volume" "ubuntu_base" {
 }
 
 resource "libvirt_volume" "os_disk" {
-  count  = 3
+  count  = 1
   name   = "postgres-os-disk-${count.index}.qcow2"
   pool   = "default"
   target = {
@@ -36,7 +93,7 @@ resource "libvirt_volume" "os_disk" {
       type = "qcow2"
     }
   }
-  capacity = 2147483648
+  capacity = 21474836480
 
   backing_store = {
     path   = libvirt_volume.ubuntu_base.path
@@ -52,7 +109,7 @@ resource "libvirt_domain" "postgres" {
   memory       = 4096
   memory_unit  = "MiB"
   vcpu         = 2
-  count        = 3
+  count        = 1
   
   os = {
     type         = "hvm"
@@ -60,6 +117,7 @@ resource "libvirt_domain" "postgres" {
     type_machine = "q35"
   }
   
+ 
   devices = {
     disks = [
       {
@@ -76,6 +134,19 @@ resource "libvirt_domain" "postgres" {
         driver = {
           type = "qcow2"
         }
+      },
+      {
+        device = "cdrom"
+        source = {
+          volume = {
+            pool   = libvirt_volume.vm1_cloudinit.pool
+            volume = libvirt_volume.vm1_cloudinit.name
+          }
+        }
+        target = {
+          bus = "sata"
+          dev = "sda"
+        }
       }
     ]
     graphics = [
@@ -83,6 +154,25 @@ resource "libvirt_domain" "postgres" {
         vnc = {
           auto_port = true
           listen   = "127.0.0.1"
+        }
+      }
+    ]
+    consoles = [
+      {
+        type        = "pty"
+        target_port = "0"
+        target_type = "serial"
+      }
+    ]
+    interfaces = [
+      {
+        model = {
+          type = "virtio"
+        }
+        source = {
+          network = {
+            network = "default"
+          }
         }
       }
     ]
