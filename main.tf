@@ -10,58 +10,32 @@ provider "libvirt" {
   uri = "qemu:///system"
 }
 
+variable "postgres_vm_count" {
+  description = "Number of postgres VMs"
+  type        = number
+  default     = 3
+}
+
 resource "libvirt_cloudinit_disk" "cloud_init" {
-  name = "cloud_init"
+  count = var.postgres_vm_count
+  name  = "cloud_init_${count.index}"
 
-  # User-data: Configure root password, enable SSH, install packages
-  user_data = <<-EOF
-    #cloud-config
-    # Set root password to "password" (change this!)
-    chpasswd:
-      list: |
-        root:password
-      expire: false
+  user_data      = file("${path.module}/user_data.yml")
+  network_config = file("${path.module}/network_config.yml")
 
-    # Enable SSH password authentication
-    ssh_pwauth: true
-
-    # Install and enable SSH server
-    packages:
-      - openssh-server
-
-    # Optional: Add SSH public key for key-based auth (more secure)
-    # ssh_authorized_keys:
-    #   - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC0/Ho... your-key-here
-
-    # Set timezone
-    timezone: UTC
-
-    # Final message on console
-    final_message: "VM1 is ready! SSH: ssh root@<IP>"
-  EOF
-
-  # Meta-data: Instance identification
-  meta_data = <<-EOF
-    instance-id: vm1-001
-    local-hostname: ubuntu-vm1
-  EOF
-
-  # Network config: Use DHCP (default behavior)
-  network_config = <<-EOF
-    version: 2
-    ethernets:
-      eth0:
-        dhcp4: true
-  EOF
+  meta_data = templatefile("${path.module}/meta_data.yml", {
+    hostname = "postgres-${count.index}"
+  })
 }
 
 resource "libvirt_volume" "cloud_init" {
-  name = "cloud_init.iso"
-  pool = "default"
+  count = var.postgres_vm_count
+  name  = "cloud_init_${count.index}.iso"
+  pool  = "default"
 
   create = {
     content = {
-      url = libvirt_cloudinit_disk.cloud_init.path
+      url = libvirt_cloudinit_disk.cloud_init[count.index].path
     }
   }
 }
@@ -84,7 +58,7 @@ resource "libvirt_volume" "ubuntu_base" {
 }
 
 resource "libvirt_volume" "os_disk" {
-  count  = 3
+  count  = var.postgres_vm_count
   name   = "postgres-os-disk-${count.index}.qcow2"
   pool   = "default"
   target = {
@@ -103,20 +77,19 @@ resource "libvirt_volume" "os_disk" {
 }
 
 resource "libvirt_domain" "postgres" {
+  count        = var.postgres_vm_count
   name         = "postgres-${count.index}"
   type         = "kvm"
   memory       = 4096
   memory_unit  = "MiB"
   vcpu         = 2
-  count        = 3
   
   os = {
     type         = "hvm"
     type_arch    = "x86_64"
     type_machine = "q35"
   }
-  
- 
+   
   devices = {
     disks = [
       {
@@ -138,8 +111,8 @@ resource "libvirt_domain" "postgres" {
         device = "cdrom"
         source = {
           volume = {
-            pool   = libvirt_volume.cloud_init.pool
-            volume = libvirt_volume.cloud_init.name
+            pool   = libvirt_volume.cloud_init[count.index].pool
+            volume = libvirt_volume.cloud_init[count.index].name
           }
         }
         target = {
