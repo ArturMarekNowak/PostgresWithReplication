@@ -10,8 +10,8 @@ provider "libvirt" {
   uri = "qemu:///system"
 }
 
-resource "libvirt_cloudinit_disk" "vm1_init" {
-  name = "vm1-cloudinit"
+resource "libvirt_cloudinit_disk" "cloud_init" {
+  name = "cloud_init"
 
   # User-data: Configure root password, enable SSH, install packages
   user_data = <<-EOF
@@ -55,14 +55,13 @@ resource "libvirt_cloudinit_disk" "vm1_init" {
   EOF
 }
 
-resource "libvirt_volume" "vm1_cloudinit" {
-  name = "vm1-cloudinit.iso"
+resource "libvirt_volume" "cloud_init" {
+  name = "cloud_init.iso"
   pool = "default"
-  # Format will be auto-detected as "iso"
 
   create = {
     content = {
-      url = libvirt_cloudinit_disk.vm1_init.path
+      url = libvirt_cloudinit_disk.cloud_init.path
     }
   }
 }
@@ -85,7 +84,7 @@ resource "libvirt_volume" "ubuntu_base" {
 }
 
 resource "libvirt_volume" "os_disk" {
-  count  = 1
+  count  = 3
   name   = "postgres-os-disk-${count.index}.qcow2"
   pool   = "default"
   target = {
@@ -109,7 +108,7 @@ resource "libvirt_domain" "postgres" {
   memory       = 4096
   memory_unit  = "MiB"
   vcpu         = 2
-  count        = 1
+  count        = 3
   
   os = {
     type         = "hvm"
@@ -139,8 +138,8 @@ resource "libvirt_domain" "postgres" {
         device = "cdrom"
         source = {
           volume = {
-            pool   = libvirt_volume.vm1_cloudinit.pool
-            volume = libvirt_volume.vm1_cloudinit.name
+            pool   = libvirt_volume.cloud_init.pool
+            volume = libvirt_volume.cloud_init.name
           }
         }
         target = {
