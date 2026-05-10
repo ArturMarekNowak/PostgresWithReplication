@@ -16,6 +16,47 @@ variable "postgres_vm_count" {
   default     = 3
 }
 
+resource "libvirt_network" "postgres_net" {
+  name      = "postgres-net"
+  autostart = true
+
+  forward = {
+    mode = "nat"
+  }
+
+  bridge = {
+    name = "virbr-postgres"
+  }
+
+  domain = {
+    name = "postgres.local"
+  }
+
+  ips = [
+    {
+      address = "10.0.1.1"
+      prefix  = 24
+      dhcp = {
+        enabled = true
+        ranges = [
+          {
+            start = "10.0.1.100"
+            end   = "10.0.1.250"
+          }
+        ]
+        hosts = [
+          for i in range(var.postgres_vm_count) : {
+            ip   = "10.0.1.1${i}"
+            mac  = "52:54:00:12:34:5${i}"
+            name = "postgres-${i}"
+          }
+        ]
+      }
+    }
+  ]
+}
+
+
 resource "libvirt_cloudinit_disk" "cloud_init" {
   count = var.postgres_vm_count
   name  = "cloud_init_${count.index}"
@@ -143,8 +184,11 @@ resource "libvirt_domain" "postgres" {
         }
         source = {
           network = {
-            network = "default"
+            network = libvirt_network.postgres_net.name
           }
+        }
+        mac = {
+          address = "52:54:00:12:34:5${count.index}"
         }
       }
     ]

@@ -1,4 +1,6 @@
 version: 2
 ethernets:
-  eth0:
+  all-interfaces:
+    match:
+      name: "en*"
     dhcp4: true
