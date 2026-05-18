@@ -5,33 +5,26 @@ terraform {
     }
   }
 }
-
 provider "libvirt" {
   uri = "qemu:///system"
 }
-
 variable "postgres_vm_count" {
   description = "Number of postgres VMs"
   type        = number
   default     = 3
 }
-
 resource "libvirt_network" "postgres_net" {
   name      = "postgres-net"
   autostart = true
-
   forward = {
     mode = "nat"
   }
-
   bridge = {
     name = "virbr-postgres"
   }
-
   domain = {
     name = "postgres.local"
   }
-
   ips = [
     {
       address = "10.0.1.1"
@@ -55,32 +48,25 @@ resource "libvirt_network" "postgres_net" {
     }
   ]
 }
-
-
 resource "libvirt_cloudinit_disk" "cloud_init" {
   count = var.postgres_vm_count
   name  = "cloud_init_${count.index}"
-
   user_data      = file("${path.module}/user_data.yml")
   network_config = file("${path.module}/network_config.yml")
-
   meta_data = templatefile("${path.module}/meta_data.yml", {
     hostname = "postgres-${count.index}"
   })
 }
-
 resource "libvirt_volume" "cloud_init" {
   count = var.postgres_vm_count
   name  = "cloud_init_${count.index}.iso"
   pool  = "default"
-
   create = {
     content = {
       url = libvirt_cloudinit_disk.cloud_init[count.index].path
     }
   }
 }
-
 resource "libvirt_volume" "ubuntu_base" {
   name   = "ubuntu-24.04.qcow2"
   pool   = "default"
@@ -90,14 +76,12 @@ resource "libvirt_volume" "ubuntu_base" {
       type = "qcow2"
     }
   }
-
   create = {
     content = {
       url = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
     }
   }
 }
-
 resource "libvirt_volume" "os_disk" {
   count  = var.postgres_vm_count
   name   = "postgres-os-disk-${count.index}.qcow2"
@@ -108,9 +92,34 @@ resource "libvirt_volume" "os_disk" {
     }
   }
   capacity = 21474836480
-
   backing_store = {
     path   = libvirt_volume.ubuntu_base.path
+    format = {
+      type = "qcow2"
+    }
+  }
+}
+
+# vdb — 20 GB data disk per VM
+resource "libvirt_volume" "data_disk_vdb" {
+  count    = var.postgres_vm_count
+  name     = "postgres-data-vdb-${count.index}.qcow2"
+  pool     = "default"
+  capacity = 21474836480  # 20 GB in bytes
+  target = {
+    format = {
+      type = "qcow2"
+    }
+  }
+}
+
+# vdc — 5 GB data disk per VM
+resource "libvirt_volume" "data_disk_vdc" {
+  count    = var.postgres_vm_count
+  name     = "postgres-data-vdc-${count.index}.qcow2"
+  pool     = "default"
+  capacity = 5368709120   # 5 GB in bytes
+  target = {
     format = {
       type = "qcow2"
     }
@@ -142,6 +151,38 @@ resource "libvirt_domain" "postgres" {
         }
         target = {
           dev = "vda"
+          bus = "virtio"
+        }
+        driver = {
+          type = "qcow2"
+        }
+      },
+      # vdb — 20 GB
+      {
+        source = {
+          volume = {
+            pool   = libvirt_volume.data_disk_vdb[count.index].pool
+            volume = libvirt_volume.data_disk_vdb[count.index].name
+          }
+        }
+        target = {
+          dev = "vdb"
+          bus = "virtio"
+        }
+        driver = {
+          type = "qcow2"
+        }
+      },
+      # vdc — 5 GB
+      {
+        source = {
+          volume = {
+            pool   = libvirt_volume.data_disk_vdc[count.index].pool
+            volume = libvirt_volume.data_disk_vdc[count.index].name
+          }
+        }
+        target = {
+          dev = "vdc"
           bus = "virtio"
         }
         driver = {
@@ -193,6 +234,5 @@ resource "libvirt_domain" "postgres" {
       }
     ]
   }  
-
   running = true
 }
