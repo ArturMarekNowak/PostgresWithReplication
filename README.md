@@ -18,6 +18,7 @@ I was inspired by the Techno Tim's youtube video:
 ## Requirements
 
 1. qemu-kvm installed
+2. terraform installed
 
 ## Quickstartup
 
@@ -45,7 +46,7 @@ To cleanup:
 
 ## Troubleshooting
 
-Encountered problems:
+List of encountered solutions to the encountered problems:
 
 https://github.com/dmacvicar/terraform-provider-libvirt/issues/1024#issuecomment-2660060520 <br>
 https://github.com/dmacvicar/terraform-provider-libvirt/issues/1163
