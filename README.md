@@ -3,7 +3,7 @@
 Aim of this project is to write a terraform script that runs 3 VMs with natively installed postgres with replication enabled and at least 1 VM running HAProxy that will direct traffic to the postgres databases with the usage of virtual IP. Project is still in progress
 
 <div aling="center">
-  <img src="docs/postgres_haproxy_vm_layout.svg" alt="vms_layout" width="50%">
+  <img src="docs/postgres_haproxy_vm_layout.svg" alt="vms_layout">
 </div>
 
 I was inspired by the Techno Tim's youtube video: 
