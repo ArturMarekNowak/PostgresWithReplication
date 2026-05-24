@@ -1,19 +1,55 @@
 #cloud-config
 # Set root password to "password" (change this!)
+users:
+  - name: usr_admin
+    shell: /bin/bash
+    sudo: ALL=(ALL:ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys: 
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF0xMS+8L4ez3jdXTlCuqSLUi0KIdZM0zoDZo3R50wNl usr_admin
+       
 chpasswd:
   list: |
-    root:password
+    root:*
   expire: false
 
-# Enable SSH password authentication
-ssh_pwauth: true
+ssh_pwauth: false
 
-# Install and enable SSH server
 packages:
   - openssh-server
+  - postgresql
+  - postgresql-contrib
+  - rsync
 
-# Set timezone
+package_update: true
+package_upgrade: true
+
 timezone: UTC
 
-# Final message on console
 final_message: "VM is ready! SSH: ssh root@$IP"
+
+runcmd: 
+  - set -x  
+  - mkfs.ext4 /dev/vdb
+  - mkdir -p /mnt/pgdata
+  - mount /dev/vdb /mnt/pgdata
+  - echo "/dev/vdb /mnt/pgdata ext4 defaults 0 2" >> /etc/fstab
+  - chown postgres:postgres /mnt/pgdata
+  - echo "" | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+  - systemctl stop postgresql
+  - systemctl disable postgresql
+
+  - echo "initial postgres setup finished on $(hostname) at $(date), starting etcd installation" | wall &
+
+  - wget https://github.com/etcd-io/etcd/releases/download/v3.5.17/etcd-v3.5.17-linux-amd64.tar.gz
+  - tar xvf etcd-v3.5.17-linux-amd64.tar.gz
+  - mv etcd-v3.5.17-linux-amd64 etcd
+  - mv etcd-v3.5.17-linux-amd64 etcd
+  - useradd --system --home /var/lib/etcd --shell /bin/false etcd
+  
+  - echo "initial etcd setup finished on $(etcdctl version), configuring etcd certs now" | wall &
+
+  - mkdir -p /etc/etcd
+  - mkdir -p /etc/etcd/ssl
+  - apt install openssl
+

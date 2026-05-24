@@ -39,7 +39,7 @@ resource "libvirt_network" "postgres_net" {
         ]
         hosts = [
           for i in range(var.postgres_vm_count) : {
-            ip   = "10.0.1.1${i}"
+            ip   = "10.0.1.3${i}"
             mac  = "52:54:00:12:34:5${i}"
             name = "postgres-${i}"
           }
