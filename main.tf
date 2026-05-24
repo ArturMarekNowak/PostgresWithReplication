@@ -51,7 +51,14 @@ resource "libvirt_network" "postgres_net" {
 resource "libvirt_cloudinit_disk" "cloud_init" {
   count = var.postgres_vm_count
   name  = "cloud_init_${count.index}"
-  user_data      = file("${path.module}/cloudInit/user_data.yml")
+  user_data = templatefile("${path.module}/cloudInit/user_data.yml", {
+    hostname       = "postgres-${count.index}"
+    ca_crt         = filebase64("${path.module}/certs/ca.crt")
+    node_crt       = filebase64("${path.module}/certs/etcd${count.index}.crt")
+    node_key       = filebase64("${path.module}/certs/etcd${count.index}.key")
+    etcd_env       = filebase64("${path.module}/etcd/etcd${count.index}.env")
+    etcd_service   = filebase64("${path.module}/etcd/etcd.service")
+  })
   network_config = file("${path.module}/cloudInit/network_config.yml")
   meta_data = templatefile("${path.module}/cloudInit/meta_data.yml", {
     hostname = "postgres-${count.index}"
