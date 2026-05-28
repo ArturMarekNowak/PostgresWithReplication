@@ -53,9 +53,13 @@ resource "libvirt_cloudinit_disk" "cloud_init" {
   name  = "cloud_init_${count.index}"
   user_data = templatefile("${path.module}/cloudInit/user_data.yml", {
     hostname       = "postgres-${count.index}"
-    ca_crt         = filebase64("${path.module}/certs/ca.crt")
-    node_crt       = filebase64("${path.module}/certs/etcd${count.index}.crt")
-    node_key       = filebase64("${path.module}/certs/etcd${count.index}.key")
+    ca_crt         = filebase64("${path.module}/certs/etcd/ca.crt")
+    node_crt       = filebase64("${path.module}/certs/etcd/etcd${count.index}.crt")
+    node_key       = filebase64("${path.module}/certs/etcd/etcd${count.index}.key")
+    server_crt     = filebase64("${path.module}/certs/postgres/server.crt")
+    server_key     = filebase64("${path.module}/certs/postgres/server.key")
+    server_req     = filebase64("${path.module}/certs/postgres/server.req")
+    patroni_cnf    = filebase64("${path.module}/patroni/config-vm-0${count.index}.yml")
     etcd_env       = filebase64("${path.module}/etcd/etcd${count.index}.env")
     etcd_service   = filebase64("${path.module}/etcd/etcd.service")
   })
