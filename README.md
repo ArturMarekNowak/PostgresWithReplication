@@ -44,8 +44,8 @@ To cleanup:
 ~~2. Running 3 VMs~~<br>
 ~~3. Applying proper IPv4 config to each VM~~<br>
 ~~4. Running 3 VMs with additional two mounts, one for postgres itself and one for patroni~~<br>
-5. Running 3 VMs with postgres and patroni installed<br>
-6. Running 3 VMs with postgres and 1 with HAProxy<br>
+~~5. Running 3 VMs with postgres and patroni installed<br>~~
+6. Running 3 VMs with postgres and 2 VMs with HAProxy<br>
 7. Configuration of virtual IP
 
 ## Troubleshooting

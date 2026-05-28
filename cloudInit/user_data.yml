@@ -39,6 +39,22 @@ write_files:
     encoding: b64
     content: ${node_key}
     permissions: '0600'
+  - path: /var/lib/postgresql/ssl/server.crt
+    encoding: b64
+    content: ${server_crt}
+    permissions: '0644'
+  - path: /var/lib/postgresql/ssl/server.key
+    encoding: b64
+    content: ${server_key}
+    permissions: '0600'
+  - path: /var/lib/postgresql/ssl/server.req
+    encoding: b64
+    content: ${server_req}
+    permissions: '0600'
+  - path: /etc/patroni/config.yml
+    encoding: b64
+    content: ${patroni_cnf}
+    permissions: '0644'
   - path: /etc/etcd/etcd.env
     encoding: b64
     content: ${etcd_env}
@@ -53,6 +69,7 @@ packages:
   - openssh-server
   - rsync
   - openssl
+  - postgresql-common
 
 package_update: true
 package_upgrade: true
@@ -64,10 +81,11 @@ final_message: "VM is ready!"
 runcmd:
   - set -x
 
-  # PostgreSQL
-  - echo "" | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+  # PostgreSQL installation
   - apt-get update
+  - echo "" | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
   - apt-get install -y postgresql-17 postgresql-contrib
+  - echo "postgres download ended, continuing postgres isntallation" | wall &
   - mkfs.ext4 /dev/vdb
   - mkdir -p /mnt/pgdata
   - mount /dev/vdb /mnt/pgdata
@@ -89,4 +107,29 @@ runcmd:
   - systemctl daemon-reload
   - systemctl enable etcd
   - systemctl start etcd
-  - echo "etcd setup finished on $(hostname) at $(date)" | wall &
+  - echo "etcd setup finished on $(hostname) at $(date), starting postgres certs config" | wall &
+
+  # Postgres certs
+  - mkdir -p /var/lib/postgresql/data
+  - mkdir -p /var/lib/postgresql/ssl
+  - chown postgres:postgres /var/lib/postgresql/data
+  - chown postgres:postgres /var/lib/postgresql/ssl/server.*
+  - apt update 
+  - apt install -y acl
+  - setfacl -m u:postgres:r /etc/etcd/ssl/ca.crt
+  - setfacl -m u:postgres:r /etc/etcd/ssl/etcd.crt
+  - setfacl -m u:postgres:r /etc/etcd/ssl/etcd.key
+  - echo "postgres certs setup finished on $(hostname) at $(date), starting patroni config" | wall &
+
+  # Patroni certs
+  - apt install -y patroni
+  - mkdir -p /etc/patroni/
+  - sh -c 'cat /var/lib/postgresql/ssl/server.crt /var/lib/postgresql/ssl/server.key > /var/lib/postgresql/ssl/server.pem'
+  - chown postgres:postgres /var/lib/postgresql/ssl/server.pem
+  - chmod 600 /var/lib/postgresql/ssl/server.pem
+  - echo "patroni certs setup finished on $(hostname) at $(date), starting patroni and HA cluster" | wall &
+
+  # Starting patroni and HA cluster
+  - systemctl restart patroni
+  - sed -i '/ETCD_INITIAL_CLUSTER_STATE/s/new/existing/' /etc/etcd/etcd.env
+  - echo "HA postgres cluster started" | wall &
