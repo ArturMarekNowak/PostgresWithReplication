@@ -23,6 +23,10 @@ write_files:
     encoding: b64
     content: ${keepalived_cnf}
     permissions: '0644'
+  - path: /etc/haproxy/haproxy.cfg
+    encoding: b64
+    content: ${haproxy_cnf}
+    permissions: '0644'
   - path: /etc/keepalived/check_haproxy.sh
     encoding: b64
     content: ${check_haproxy}
@@ -33,7 +37,9 @@ packages:
   - openssh-server
   - rsync
   - openssl
-  - nettools
+  - net-tools
+  - haproxy
+  - keepalived
 
 package_update: true
 package_upgrade: true
@@ -44,6 +50,7 @@ final_message: "VM is ready!"
 
 runcmd:
   - set -x
+  - systemctl reload haproxy
   - useradd -r -s /bin/false keepalived_script
   - chmod +x /etc/keepalived/check_haproxy.sh
   - chown keepalived_script:keepalived_script /etc/keepalived/check_haproxy.sh

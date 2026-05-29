@@ -38,8 +38,9 @@ resource "libvirt_cloudinit_disk" "cloud_init" {
   name  = "haproxy_cloud_init_${count.index}"
   user_data = templatefile("${path.module}/cloudInit/user_data.yml", {
     hostname       = "haproxy-${count.index}"
-    keepalived_cnf = filebase64("${path.module}/keepalived/keepalived-vm-00.conf")
+    keepalived_cnf = filebase64("${path.module}/keepalived/keepalived-vm-0${count.index}.conf")
     check_haproxy  = filebase64("${path.module}/haproxy/check_haproxy.sh") 
+    haproxy_cnf    = filebase64("${path.module}/haproxy/haproxy.cfg")
   })
   network_config = file("${path.module}/cloudInit/network_config.yml")
   meta_data = templatefile("${path.module}/cloudInit/meta_data.yml", {
@@ -105,6 +106,19 @@ resource "libvirt_domain" "haproxy" {
         }
         driver = {
           type = "qcow2"
+        }
+      },
+      {
+        device = "cdrom"
+        source = {
+          volume = {
+            pool   = libvirt_volume.cloud_init[count.index].pool
+            volume = libvirt_volume.cloud_init[count.index].name
+          }
+        }
+        target = {
+          bus = "sata"
+          dev = "sda"
         }
       }
     ]
