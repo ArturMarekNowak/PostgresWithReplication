@@ -114,6 +114,7 @@ runcmd:
   - mkdir -p /var/lib/postgresql/ssl
   - chown postgres:postgres /var/lib/postgresql/data
   - chown postgres:postgres /var/lib/postgresql/ssl/server.*
+  - chmod 700 /var/lib/postgresql/data
   - apt update 
   - apt install -y acl
   - setfacl -m u:postgres:r /etc/etcd/ssl/ca.crt

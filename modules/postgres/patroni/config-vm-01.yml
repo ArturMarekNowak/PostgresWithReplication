@@ -27,9 +27,9 @@ bootstrap:
             ssl_key_file: /var/lib/postgresql/ssl/server.key  # PostgreSQL server key
         pg_hba:  # Access rules
         - hostssl replication replicator 127.0.0.1/32 md5
+        - hostssl replication replicator 10.0.1.30/32 md5
         - hostssl replication replicator 10.0.1.31/32 md5
         - hostssl replication replicator 10.0.1.32/32 md5
-        - hostssl replication replicator 10.0.1.33/32 md5
         - hostssl all all 127.0.0.1/32 md5
         - hostssl all all 0.0.0.0/0 md5
   initdb:
