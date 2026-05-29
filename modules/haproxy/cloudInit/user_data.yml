@@ -44,4 +44,8 @@ final_message: "VM is ready!"
 
 runcmd:
   - set -x
-  
+  - useradd -r -s /bin/false keepalived_script
+  - chmod +x /etc/keepalived/check_haproxy.sh
+  - chown keepalived_script:keepalived_script /etc/keepalived/check_haproxy.sh
+  - chmod 700 /etc/keepalived/check_haproxy.sh
+  - systemctl restart keepalived 
