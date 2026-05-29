@@ -5,52 +5,37 @@ terraform {
     }
   }
 }
-provider "libvirt" {
-  uri = "qemu:///system"
-}
+
 variable "postgres_vm_count" {
   description = "Number of postgres VMs"
   type        = number
   default     = 3
 }
-resource "libvirt_network" "postgres_net" {
-  name      = "postgres-net"
-  autostart = true
-  forward = {
-    mode = "nat"
-  }
-  bridge = {
-    name = "virbr-postgres"
-  }
-  domain = {
-    name = "postgres.local"
-  }
-  ips = [
-    {
-      address = "10.0.1.1"
-      prefix  = 24
-      dhcp = {
-        enabled = true
-        ranges = [
-          {
-            start = "10.0.1.100"
-            end   = "10.0.1.250"
-          }
-        ]
-        hosts = [
-          for i in range(var.postgres_vm_count) : {
-            ip   = "10.0.1.3${i}"
-            mac  = "52:54:00:12:34:5${i}"
-            name = "postgres-${i}"
-          }
-        ]
-      }
-    }
-  ]
+
+variable "network_name" {
+  type = string
+  default = "shared_net"
 }
+
+resource "libvirt_volume" "ubuntu_base" {
+  name   = "postgres-ubuntu-24.04.qcow2"
+  pool   = "default"
+  
+  target = {
+    format = {
+      type = "qcow2"
+    }
+  }
+  create = {
+    content = {
+      url = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+    }
+  }
+} 
+
 resource "libvirt_cloudinit_disk" "cloud_init" {
   count = var.postgres_vm_count
-  name  = "cloud_init_${count.index}"
+  name  = "postgres_cloud_init_${count.index}"
   user_data = templatefile("${path.module}/cloudInit/user_data.yml", {
     hostname       = "postgres-${count.index}"
     ca_crt         = filebase64("${path.module}/certs/etcd/ca.crt")
@@ -70,26 +55,11 @@ resource "libvirt_cloudinit_disk" "cloud_init" {
 }
 resource "libvirt_volume" "cloud_init" {
   count = var.postgres_vm_count
-  name  = "cloud_init_${count.index}.iso"
+  name  = "postgres_cloud_init_${count.index}.iso"
   pool  = "default"
   create = {
     content = {
       url = libvirt_cloudinit_disk.cloud_init[count.index].path
-    }
-  }
-}
-resource "libvirt_volume" "ubuntu_base" {
-  name   = "ubuntu-24.04.qcow2"
-  pool   = "default"
-  
-  target = {
-    format = {
-      type = "qcow2"
-    }
-  }
-  create = {
-    content = {
-      url = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
     }
   }
 }
@@ -236,7 +206,7 @@ resource "libvirt_domain" "postgres" {
         }
         source = {
           network = {
-            network = libvirt_network.postgres_net.name
+            network = var.network_name
           }
         }
         mac = {
