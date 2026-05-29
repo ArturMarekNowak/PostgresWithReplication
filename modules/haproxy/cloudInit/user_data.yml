@@ -1,0 +1,58 @@
+#cloud-config
+
+users:
+  - name: usr_admin
+    shell: /bin/bash
+    sudo: ALL=(ALL:ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF0xMS+8L4ez3jdXTlCuqSLUi0KIdZM0zoDZo3R50wNl usr_admin
+
+chpasswd:
+  list: |
+    root:*
+  expire: false
+
+ssh_pwauth: false
+
+bootcmd:
+  - echo "foo"
+
+write_files:
+  - path: /etc/keepalived/keepalived.conf
+    encoding: b64
+    content: ${keepalived_cnf}
+    permissions: '0644'
+  - path: /etc/haproxy/haproxy.cfg
+    encoding: b64
+    content: ${haproxy_cnf}
+    permissions: '0644'
+  - path: /etc/keepalived/check_haproxy.sh
+    encoding: b64
+    content: ${check_haproxy}
+    permissions: '0644'
+
+
+packages:
+  - openssh-server
+  - rsync
+  - openssl
+  - net-tools
+  - haproxy
+  - keepalived
+
+package_update: true
+package_upgrade: true
+
+timezone: UTC
+
+final_message: "VM is ready!"
+
+runcmd:
+  - set -x
+  - systemctl reload haproxy
+  - useradd -r -s /bin/false keepalived_script
+  - chmod +x /etc/keepalived/check_haproxy.sh
+  - chown keepalived_script:keepalived_script /etc/keepalived/check_haproxy.sh
+  - chmod 700 /etc/keepalived/check_haproxy.sh
+  - systemctl restart keepalived 

@@ -1,17 +1,17 @@
 scope: postgresql-cluster
 namespace: /service/
-name: postgres-1  # node2
+name: postgres-2  # node3
 
 etcd3:
   hosts: 10.0.1.30:2379,10.0.1.31:2379,10.0.1.32:2379  # etcd cluster nodes
   protocol: https
   cacert: /etc/etcd/ssl/ca.crt
-  cert: /etc/etcd/ssl/etcd.crt  # node2's etcd certificate
-  key: /etc/etcd/ssl/etcd.key  # node2's etcd key
+  cert: /etc/etcd/ssl/etcd.crt  # node3's etcd certificate
+  key: /etc/etcd/ssl/etcd.key  # node3's etcd key
 
 restapi:
   listen: 0.0.0.0:8008
-  connect_address: 10.0.1.31:8008  # IP for node2's REST API
+  connect_address: 10.0.1.32:8008  # IP for node2's REST API
   certfile: /var/lib/postgresql/ssl/server.pem
 
 bootstrap:
@@ -27,9 +27,9 @@ bootstrap:
             ssl_key_file: /var/lib/postgresql/ssl/server.key  # PostgreSQL server key
         pg_hba:  # Access rules
         - hostssl replication replicator 127.0.0.1/32 md5
+        - hostssl replication replicator 10.0.1.30/32 md5
         - hostssl replication replicator 10.0.1.31/32 md5
         - hostssl replication replicator 10.0.1.32/32 md5
-        - hostssl replication replicator 10.0.1.33/32 md5
         - hostssl all all 127.0.0.1/32 md5
         - hostssl all all 0.0.0.0/0 md5
   initdb:
@@ -38,7 +38,7 @@ bootstrap:
 
 postgresql:
   listen: 0.0.0.0:5432
-  connect_address: 10.0.1.31:5432  # IP for node2's PostgreSQL
+  connect_address: 10.0.1.32:5432  # IP for node2's PostgreSQL
   data_dir: /var/lib/postgresql/data
   bin_dir: /usr/lib/postgresql/17/bin  # Binary directory for PostgreSQL 17
   authentication:

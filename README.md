@@ -1,6 +1,6 @@
 # Postgres with replication
 
-Aim of this project is to write a terraform script that runs 3 VMs with natively installed postgres with replication enabled and at least 1 VM running HAProxy that will direct traffic to the postgres databases with the usage of virtual IP. Project is still in progress
+Aim of this project is to write a terraform script that runs 3 VMs with natively installed postgres with replication enabled and at least 1 VM running HAProxy that will direct traffic to the postgres databases with the usage of virtual IP
 
 <div aling="center">
   <img src="docs/postgres_haproxy_vm_layout.svg" alt="vms_layout">
@@ -37,16 +37,6 @@ Run VMs:
 To cleanup:
 
 `terraform destroy`
-
-## Milestones
-
-~~1. Running 1 VM with a provider~~<br>
-~~2. Running 3 VMs~~<br>
-~~3. Applying proper IPv4 config to each VM~~<br>
-~~4. Running 3 VMs with additional two mounts, one for postgres itself and one for patroni~~<br>
-~~5. Running 3 VMs with postgres and patroni installed<br>~~
-6. Running 3 VMs with postgres and 2 VMs with HAProxy<br>
-7. Configuration of virtual IP
 
 ## Troubleshooting
 

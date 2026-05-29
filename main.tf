@@ -1,249 +1,50 @@
 terraform {
   required_providers {
     libvirt = {
-      source = "dmacvicar/libvirt"
+      source  = "dmacvicar/libvirt"
+      version = "~> 0.7"
     }
   }
 }
+
 provider "libvirt" {
   uri = "qemu:///system"
 }
-variable "postgres_vm_count" {
-  description = "Number of postgres VMs"
-  type        = number
-  default     = 3
+
+module "postgres" {
+  source       = "./modules/postgres"
+  network_name     = libvirt_network.shared_net.name
 }
-resource "libvirt_network" "postgres_net" {
-  name      = "postgres-net"
+
+module "haproxy" {
+  source       = "./modules/haproxy"
+  network_name     = libvirt_network.shared_net.name
+}
+
+resource "libvirt_network" "shared_net" {
+  name      = "cluster-net"
   autostart = true
-  forward = {
-    mode = "nat"
-  }
-  bridge = {
-    name = "virbr-postgres"
-  }
-  domain = {
-    name = "postgres.local"
-  }
-  ips = [
-    {
-      address = "10.0.1.1"
-      prefix  = 24
-      dhcp = {
-        enabled = true
-        ranges = [
-          {
-            start = "10.0.1.100"
-            end   = "10.0.1.250"
-          }
-        ]
-        hosts = [
-          for i in range(var.postgres_vm_count) : {
-            ip   = "10.0.1.3${i}"
-            mac  = "52:54:00:12:34:5${i}"
-            name = "postgres-${i}"
-          }
-        ]
-      }
+  forward   = { mode = "nat" }
+  bridge    = { name = "virbr-cluster" }
+  domain    = { name = "cluster.local" }
+  ips = [{
+    address = "10.0.1.1"
+    prefix  = 24
+    dhcp = {
+      enabled = true
+      ranges  = [{ start = "10.0.1.100", end = "10.0.1.250" }]
+      hosts   = concat(
+        [for i in range(3) : {
+          ip   = "10.0.1.3${i}"
+          mac  = "52:54:00:12:34:5${i}"
+          name = "postgres-${i}"
+        }],
+        [for i in range(2) : {
+          ip   = "10.0.1.2${i}"
+          mac  = "52:54:00:12:34:4${i}"
+          name = "haproxy-${i}"
+        }]
+      )
     }
-  ]
-}
-resource "libvirt_cloudinit_disk" "cloud_init" {
-  count = var.postgres_vm_count
-  name  = "cloud_init_${count.index}"
-  user_data = templatefile("${path.module}/cloudInit/user_data.yml", {
-    hostname       = "postgres-${count.index}"
-    ca_crt         = filebase64("${path.module}/certs/etcd/ca.crt")
-    node_crt       = filebase64("${path.module}/certs/etcd/etcd${count.index}.crt")
-    node_key       = filebase64("${path.module}/certs/etcd/etcd${count.index}.key")
-    server_crt     = filebase64("${path.module}/certs/postgres/server.crt")
-    server_key     = filebase64("${path.module}/certs/postgres/server.key")
-    server_req     = filebase64("${path.module}/certs/postgres/server.req")
-    patroni_cnf    = filebase64("${path.module}/patroni/config-vm-0${count.index}.yml")
-    etcd_env       = filebase64("${path.module}/etcd/etcd${count.index}.env")
-    etcd_service   = filebase64("${path.module}/etcd/etcd.service")
-  })
-  network_config = file("${path.module}/cloudInit/network_config.yml")
-  meta_data = templatefile("${path.module}/cloudInit/meta_data.yml", {
-    hostname = "postgres-${count.index}"
-  })
-}
-resource "libvirt_volume" "cloud_init" {
-  count = var.postgres_vm_count
-  name  = "cloud_init_${count.index}.iso"
-  pool  = "default"
-  create = {
-    content = {
-      url = libvirt_cloudinit_disk.cloud_init[count.index].path
-    }
-  }
-}
-resource "libvirt_volume" "ubuntu_base" {
-  name   = "ubuntu-24.04.qcow2"
-  pool   = "default"
-  
-  target = {
-    format = {
-      type = "qcow2"
-    }
-  }
-  create = {
-    content = {
-      url = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
-    }
-  }
-}
-resource "libvirt_volume" "os_disk" {
-  count  = var.postgres_vm_count
-  name   = "postgres-os-disk-${count.index}.qcow2"
-  pool   = "default"
-  target = {
-    format = {
-      type = "qcow2"
-    }
-  }
-  capacity = 21474836480
-  backing_store = {
-    path   = libvirt_volume.ubuntu_base.path
-    format = {
-      type = "qcow2"
-    }
-  }
-}
-
-# vdb — 20 GB data disk per VM
-resource "libvirt_volume" "data_disk_vdb" {
-  count    = var.postgres_vm_count
-  name     = "postgres-data-vdb-${count.index}.qcow2"
-  pool     = "default"
-  capacity = 21474836480  # 20 GB in bytes
-  target = {
-    format = {
-      type = "qcow2"
-    }
-  }
-}
-
-# vdc — 5 GB data disk per VM
-resource "libvirt_volume" "data_disk_vdc" {
-  count    = var.postgres_vm_count
-  name     = "postgres-data-vdc-${count.index}.qcow2"
-  pool     = "default"
-  capacity = 5368709120   # 5 GB in bytes
-  target = {
-    format = {
-      type = "qcow2"
-    }
-  }
-}
-
-resource "libvirt_domain" "postgres" {
-  count        = var.postgres_vm_count
-  name         = "postgres-${count.index}"
-  type         = "kvm"
-  memory       = 4096
-  memory_unit  = "MiB"
-  vcpu         = 2
-  
-  os = {
-    type         = "hvm"
-    type_arch    = "x86_64"
-    type_machine = "q35"
-  }
-   
-  devices = {
-    disks = [
-      {
-        source = {
-          volume = {
-            pool   = libvirt_volume.os_disk[count.index].pool
-            volume = libvirt_volume.os_disk[count.index].name
-          }
-        }
-        target = {
-          dev = "vda"
-          bus = "virtio"
-        }
-        driver = {
-          type = "qcow2"
-        }
-      },
-      # vdb — 20 GB
-      {
-        source = {
-          volume = {
-            pool   = libvirt_volume.data_disk_vdb[count.index].pool
-            volume = libvirt_volume.data_disk_vdb[count.index].name
-          }
-        }
-        target = {
-          dev = "vdb"
-          bus = "virtio"
-        }
-        driver = {
-          type = "qcow2"
-        }
-      },
-      # vdc — 5 GB
-      {
-        source = {
-          volume = {
-            pool   = libvirt_volume.data_disk_vdc[count.index].pool
-            volume = libvirt_volume.data_disk_vdc[count.index].name
-          }
-        }
-        target = {
-          dev = "vdc"
-          bus = "virtio"
-        }
-        driver = {
-          type = "qcow2"
-        }
-      },
-      {
-        device = "cdrom"
-        source = {
-          volume = {
-            pool   = libvirt_volume.cloud_init[count.index].pool
-            volume = libvirt_volume.cloud_init[count.index].name
-          }
-        }
-        target = {
-          bus = "sata"
-          dev = "sda"
-        }
-      }
-    ]
-    graphics = [
-      {
-        vnc = {
-          auto_port = true
-          listen   = "127.0.0.1"
-        }
-      }
-    ]
-    consoles = [
-      {
-        type        = "pty"
-        target_port = "0"
-        target_type = "serial"
-      }
-    ]
-    interfaces = [
-      {
-        model = {
-          type = "virtio"
-        }
-        source = {
-          network = {
-            network = libvirt_network.postgres_net.name
-          }
-        }
-        mac = {
-          address = "52:54:00:12:34:5${count.index}"
-        }
-      }
-    ]
-  }  
-  running = true
+  }]
 }
