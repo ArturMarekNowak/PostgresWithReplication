@@ -89,6 +89,9 @@ runcmd:
   - mkfs.ext4 /dev/vdb
   - mkdir -p /mnt/pgdata
   - mount /dev/vdb /mnt/pgdata
+  - mkdir -p /mnt/pgdata/data
+  - chown -R postgres:postgres /mnt/pgdata
+  - chmod 700 /mnt/pgdata/data
   - echo "/dev/vdb /mnt/pgdata ext4 defaults 0 2" >> /etc/fstab
   - chown postgres:postgres /mnt/pgdata
   - systemctl stop postgresql
@@ -114,7 +117,7 @@ runcmd:
   - echo "etcd setup finished on $(hostname) at $(date), starting postgres certs config" | wall &
 
   # Postgres certs
-  - mkdir -p /var/lib/postgresql/data
+  # - mkdir -p /var/lib/postgresql/data
   - mkdir -p /var/lib/postgresql/ssl
   - chown postgres:postgres /var/lib/postgresql/data
   - chown postgres:postgres /var/lib/postgresql/ssl/server.*
