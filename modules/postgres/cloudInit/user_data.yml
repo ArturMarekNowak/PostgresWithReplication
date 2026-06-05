@@ -89,6 +89,9 @@ runcmd:
   - mkfs.ext4 /dev/vdb
   - mkdir -p /mnt/pgdata
   - mount /dev/vdb /mnt/pgdata
+  - mkdir -p /mnt/pgdata/data
+  - chown -R postgres:postgres /mnt/pgdata
+  - chmod 700 /mnt/pgdata/data
   - echo "/dev/vdb /mnt/pgdata ext4 defaults 0 2" >> /etc/fstab
   - chown postgres:postgres /mnt/pgdata
   - systemctl stop postgresql
@@ -100,17 +103,21 @@ runcmd:
   - tar xvf etcd-v3.5.17-linux-amd64.tar.gz
   - mv etcd-v3.5.17-linux-amd64/etcd etcd-v3.5.17-linux-amd64/etcdctl /usr/local/bin/
   - rm -rf etcd-v3.5.17-linux-amd64 etcd-v3.5.17-linux-amd64.tar.gz
-  - useradd --system --home /var/lib/etcd --shell /bin/false etcd
+  - mkfs.ext4 /dev/vdc
+  - mkdir -p /mnt/etcddata
+  - mount /dev/vdc /mnt/etcddata
+  - echo "/dev/vdc /mnt/etcddata ext4 defaults 0 2" >> /etc/fstab
+  - useradd --system --home /mnt/etcddata --shell /bin/false etcd
   - mkdir -p /var/lib/etcd
   - chown -R etcd:etcd /etc/etcd
-  - chown -R etcd:etcd /var/lib/etcd
+  - chown -R etcd:etcd /mnt/etcddata
   - systemctl daemon-reload
   - systemctl enable etcd
   - systemctl start etcd
   - echo "etcd setup finished on $(hostname) at $(date), starting postgres certs config" | wall &
 
   # Postgres certs
-  - mkdir -p /var/lib/postgresql/data
+  # - mkdir -p /var/lib/postgresql/data
   - mkdir -p /var/lib/postgresql/ssl
   - chown postgres:postgres /var/lib/postgresql/data
   - chown postgres:postgres /var/lib/postgresql/ssl/server.*
