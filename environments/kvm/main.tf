@@ -12,12 +12,12 @@ provider "libvirt" {
 }
 
 module "postgres" {
-  source       = "./modules/postgres"
+  source       = "../../modules/postgres"
   network_name     = libvirt_network.shared_net.name
 }
 
 module "haproxy" {
-  source       = "./modules/haproxy"
+  source       = "../../modules/haproxy"
   network_name     = libvirt_network.shared_net.name
 }
 
