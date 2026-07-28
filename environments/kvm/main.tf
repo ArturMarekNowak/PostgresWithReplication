@@ -11,14 +11,16 @@ provider "libvirt" {
   uri = "qemu:///system"
 }
 
-module "postgres" {
-  source       = "../../modules/postgres"
-  network_name     = libvirt_network.shared_net.name
+variable "superuser_password" {
+  description = "PostgreSQL superuser password"
+  type        = string
+  sensitive   = true
 }
 
-module "haproxy" {
-  source       = "../../modules/haproxy"
-  network_name     = libvirt_network.shared_net.name
+variable "replication_password" {
+  description = "PostgreSQL replication password"
+  type        = string
+  sensitive   = true
 }
 
 resource "libvirt_network" "shared_net" {
@@ -33,7 +35,7 @@ resource "libvirt_network" "shared_net" {
     dhcp = {
       enabled = true
       ranges  = [{ start = "10.0.1.100", end = "10.0.1.250" }]
-      hosts   = concat(
+      hosts = concat(
         [for i in range(3) : {
           ip   = "10.0.1.3${i}"
           mac  = "52:54:00:12:34:5${i}"
@@ -47,4 +49,16 @@ resource "libvirt_network" "shared_net" {
       )
     }
   }]
+}
+
+module "postgres" {
+  source               = "../../modules/postgres/kvm"
+  network_name         = libvirt_network.shared_net.name
+  superuser_password   = var.superuser_password
+  replication_password = var.replication_password
+}
+
+module "haproxy" {
+  source       = "../../modules/haproxy/kvm"
+  network_name = libvirt_network.shared_net.name
 }

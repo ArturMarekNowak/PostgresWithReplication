@@ -1,0 +1,199 @@
+terraform {
+  required_providers {
+    libvirt = {
+      source = "dmacvicar/libvirt"
+    }
+  }
+}
+
+variable "postgres_vm_count" {
+  description = "Number of postgres VMs"
+  type        = number
+  default     = 3
+}
+
+variable "network_name" {
+  type    = string
+  default = "shared_net"
+}
+
+variable "node_ips" {
+  description = "Fixed IPs assigned to each postgres node via DHCP reservation"
+  type        = list(string)
+  default     = ["10.0.1.30", "10.0.1.31", "10.0.1.32"]
+}
+
+variable "superuser_password" {
+  description = "PostgreSQL superuser password"
+  type        = string
+  sensitive   = true
+}
+
+variable "replication_password" {
+  description = "PostgreSQL replication password"
+  type        = string
+  sensitive   = true
+}
+
+locals {
+  etcd_hosts = join(",", [for ip in var.node_ips : "${ip}:2379"])
+}
+
+resource "libvirt_volume" "ubuntu_base" {
+  name = "postgres-ubuntu-24.04.qcow2"
+  pool = "default"
+
+  target = {
+    format = { type = "qcow2" }
+  }
+  create = {
+    content = {
+      url = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+    }
+  }
+}
+
+resource "libvirt_cloudinit_disk" "cloud_init" {
+  count = var.postgres_vm_count
+  name  = "postgres_cloud_init_${count.index}"
+  user_data = templatefile("${path.module}/../cloudInit/user_data.yml", {
+    hostname     = "postgres-${count.index}"
+    ca_crt       = filebase64("${path.module}/../certs/etcd/ca.crt")
+    node_crt     = filebase64("${path.module}/../certs/etcd/etcd${count.index}.crt")
+    node_key     = filebase64("${path.module}/../certs/etcd/etcd${count.index}.key")
+    server_crt   = filebase64("${path.module}/../certs/postgres/server.crt")
+    server_key   = filebase64("${path.module}/../certs/postgres/server.key")
+    server_req   = filebase64("${path.module}/../certs/postgres/server.req")
+    patroni_cnf  = base64encode(templatefile("${path.module}/../patroni/config.yml.tpl", {
+      node_index           = count.index
+      node_ip              = var.node_ips[count.index]
+      node_ips             = var.node_ips
+      etcd_hosts           = local.etcd_hosts
+      superuser_password   = var.superuser_password
+      replication_password = var.replication_password
+    }))
+    etcd_env     = base64encode(templatefile("${path.module}/../etcd/etcd.env.tpl", {
+      node_index      = count.index
+      node_ip         = var.node_ips[count.index]
+      initial_cluster = join(",", [for i, ip in var.node_ips : "postgresql-${i}=https://${ip}:2380"])
+    }))
+    etcd_service = filebase64("${path.module}/../etcd/etcd.service")
+  })
+  network_config = file("${path.module}/../cloudInit/network_config.yml")
+  meta_data = templatefile("${path.module}/../cloudInit/meta_data.yml", {
+    hostname = "postgres-${count.index}"
+  })
+}
+
+resource "libvirt_volume" "cloud_init" {
+  count = var.postgres_vm_count
+  name  = "postgres_cloud_init_${count.index}.iso"
+  pool  = "default"
+  create = {
+    content = { url = libvirt_cloudinit_disk.cloud_init[count.index].path }
+  }
+}
+
+resource "libvirt_volume" "os_disk" {
+  count = var.postgres_vm_count
+  name  = "postgres-os-disk-${count.index}.qcow2"
+  pool  = "default"
+  target = {
+    format = { type = "qcow2" }
+  }
+  capacity = 21474836480
+  backing_store = {
+    path   = libvirt_volume.ubuntu_base.path
+    format = { type = "qcow2" }
+  }
+}
+
+resource "libvirt_volume" "data_disk_vdb" {
+  count    = var.postgres_vm_count
+  name     = "postgres-data-vdb-${count.index}.qcow2"
+  pool     = "default"
+  capacity = 21474836480
+  target = {
+    format = { type = "qcow2" }
+  }
+}
+
+resource "libvirt_volume" "data_disk_vdc" {
+  count    = var.postgres_vm_count
+  name     = "postgres-data-vdc-${count.index}.qcow2"
+  pool     = "default"
+  capacity = 5368709120
+  target = {
+    format = { type = "qcow2" }
+  }
+}
+
+resource "libvirt_domain" "postgres" {
+  count       = var.postgres_vm_count
+  name        = "postgres-${count.index}"
+  type        = "kvm"
+  memory      = 4096
+  memory_unit = "MiB"
+  vcpu        = 2
+
+  os = {
+    type         = "hvm"
+    type_arch    = "x86_64"
+    type_machine = "q35"
+  }
+
+  devices = {
+    disks = [
+      {
+        source = {
+          volume = {
+            pool   = libvirt_volume.os_disk[count.index].pool
+            volume = libvirt_volume.os_disk[count.index].name
+          }
+        }
+        target = { dev = "vda", bus = "virtio" }
+        driver = { type = "qcow2" }
+      },
+      {
+        source = {
+          volume = {
+            pool   = libvirt_volume.data_disk_vdb[count.index].pool
+            volume = libvirt_volume.data_disk_vdb[count.index].name
+          }
+        }
+        target = { dev = "vdb", bus = "virtio" }
+        driver = { type = "qcow2" }
+      },
+      {
+        source = {
+          volume = {
+            pool   = libvirt_volume.data_disk_vdc[count.index].pool
+            volume = libvirt_volume.data_disk_vdc[count.index].name
+          }
+        }
+        target = { dev = "vdc", bus = "virtio" }
+        driver = { type = "qcow2" }
+      },
+      {
+        device = "cdrom"
+        source = {
+          volume = {
+            pool   = libvirt_volume.cloud_init[count.index].pool
+            volume = libvirt_volume.cloud_init[count.index].name
+          }
+        }
+        target = { bus = "sata", dev = "sda" }
+      }
+    ]
+    graphics  = [{ vnc = { auto_port = true, listen = "127.0.0.1" } }]
+    consoles  = [{ type = "pty", target_port = "0", target_type = "serial" }]
+    interfaces = [
+      {
+        model  = { type = "virtio" }
+        source = { network = { network = var.network_name } }
+        mac    = { address = "52:54:00:12:34:5${count.index}" }
+      }
+    ]
+  }
+  running = true
+}
